@@ -29,6 +29,9 @@ const constraint = {
 		autoGainControl: true, // 自动增益
 	},
 }
+let mediaRecorder: MediaRecorder
+// 录制数据的缓冲区
+let buffer: Blob[] = []
 
 export default function Page() {
 	const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -82,7 +85,7 @@ export default function Page() {
 	}
 	// 初始化WebRTC
 	const initWebRTC = async () => {
-		localStream = await navigator.mediaDevices.getUserMedia(constraint)
+		// localStream = await navigator.mediaDevices.getUserMedia(constraint)
 		remoteStream = new MediaStream()
 		localVideoRef.current!.srcObject = localStream
 		remoteVideoRef.current!.srcObject = remoteStream
@@ -112,6 +115,14 @@ export default function Page() {
 		}
 	}
 
+	const openCamera = async () => {
+		localStream = await navigator.mediaDevices.getUserMedia(constraint)
+		initWebRTC()
+	}
+	const openShareScreen = async () => {
+		localStream = await navigator.mediaDevices.getDisplayMedia()
+		initWebRTC()
+	}
 	// 关闭音频流
 	const toggleAudio = () => {
 		const status = !hasAudio
@@ -129,6 +140,53 @@ export default function Page() {
 		localStream.getVideoTracks().forEach(track => {
 			track.enabled = status
 		})
+	}
+	const capture = () => {
+		// 将视频图片映射到canvas中，转为base64
+		const canvas = document.createElement('canvas')
+		canvas.width = localVideoRef.current!.clientWidth
+		canvas.height = localVideoRef.current!.clientHeight
+		const ctx = canvas.getContext('2d')
+		ctx?.drawImage(localVideoRef.current as any, 0, 0, localVideoRef.current!.clientWidth, localVideoRef.current!.clientHeight)
+
+		// 下载
+		const url = canvas.toDataURL('base64')
+		const a = document.createElement('a')
+		a.href = url
+		a.download = Date.now() + '.png'
+		a.click()
+		URL.revokeObjectURL(url)
+		a.remove()
+	}
+	const startRecord = () => {
+		mediaRecorder = new MediaRecorder(localStream, {
+			audioBitsPerSecond: 128000,
+			videoBitsPerSecond: 2500000,
+			mimeType: 'video/webm; codecs="vp8,opus"',
+		})
+		mediaRecorder.start()
+
+		mediaRecorder.onstart = () => {}
+		// 接受到的数据
+		mediaRecorder.ondataavailable = e => {
+			buffer.push(e.data)
+		}
+		mediaRecorder.onstop = () => {
+			const blob = new Blob(buffer, { type: 'video/mp4' })
+
+			// 下载MP4
+			const url = URL.createObjectURL(blob)
+			const a = document.createElement('a')
+			a.href = url
+			a.download = Date.now() + '.mp4'
+			a.click()
+			URL.revokeObjectURL(url)
+			a.remove()
+		}
+	}
+	const stopRecord = () => {
+		mediaRecorder.stop()
+		buffer = []
 	}
 	// 加入房间
 	const join = () => {
@@ -166,6 +224,7 @@ export default function Page() {
 			sender = pc.addTrack(track, localStream)
 		})
 	}
+	// 发送消息
 	const sendMessage = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === 'Enter') {
 			// @ts-ignore
@@ -176,7 +235,7 @@ export default function Page() {
 	}
 
 	useEffect(() => {
-		initWebRTC()
+		// initWebRTC()
 		initSocket()
 		getDevices()
 	}, [])
@@ -188,13 +247,19 @@ export default function Page() {
 				当前房间号: {roomId}
 			</Alert>
 			{/* 控制 */}
-			<div className="flex my-4 justify-between flex-wrap">
+			<div className="my-4">
 				<div className="flex gap-4 flex-wrap mb-4">
+					<Button colorScheme="teal" onClick={openCamera}>
+						Open Camera
+					</Button>
+					<Button colorScheme="teal" onClick={openShareScreen}>
+						Open ShareScreen
+					</Button>
 					<Button colorScheme="teal" onClick={toggleAudio}>
-						Toggle Audio
+						Toggle Audio Stream
 					</Button>
 					<Button colorScheme="teal" onClick={toggleVideo}>
-						Toggle Video
+						Toggle Video Stream
 					</Button>
 					<Select width={300} onChange={handleDevice}>
 						{videoDevices.map(device => (
@@ -203,16 +268,25 @@ export default function Page() {
 							</option>
 						))}
 					</Select>
-					<Input placeholder="send message" onKeyDown={sendMessage} width={200} />
+					<Button colorScheme="teal" onClick={capture}>
+						Capture
+					</Button>
+					<Button colorScheme="teal" onClick={startRecord}>
+						Start Record
+					</Button>
+					<Button colorScheme="teal" onClick={stopRecord}>
+						Stop Record
+					</Button>
 				</div>
 				<div className="flex gap-4">
-					<Input placeholder="room id" onChange={e => setRoomId(e.target.value)} disabled={isJoin} />
+					<Input placeholder="room id" onChange={e => setRoomId(e.target.value)} disabled={isJoin} width={200} />
 					<Button colorScheme="teal" onClick={join}>
 						Join
 					</Button>
 					<Button colorScheme="teal" onClick={leave}>
 						Leave
 					</Button>
+					<Input placeholder="send message" onKeyDown={sendMessage} width={200} />
 				</div>
 			</div>
 			{/* 视频流 */}
