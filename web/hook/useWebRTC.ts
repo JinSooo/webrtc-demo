@@ -3,6 +3,7 @@ import { Socket } from 'socket.io-client'
 
 const useWebRTC = () => {
 	const { current: pc } = useRef(new RTCPeerConnection())
+	const { current: dc } = useRef(pc.createDataChannel('chat'))
 
 	const createOffer = async (socket: Socket, userId: string, roomId: string) => {
 		const offer = await pc.createOffer()
@@ -49,6 +50,7 @@ const useWebRTC = () => {
 
 	return {
 		pc,
+		dc,
 		createOffer,
 		createAnswer,
 		addAnswer,

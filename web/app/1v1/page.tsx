@@ -1,7 +1,7 @@
 'use client'
 
 import { Alert, AlertIcon, Button, Input, Select } from '@chakra-ui/react'
-import { ChangeEvent, useEffect, useRef, useState } from 'react'
+import { ChangeEvent, useEffect, useRef, useState, KeyboardEvent } from 'react'
 import io, { Socket } from 'socket.io-client'
 import { useToast } from '@chakra-ui/react'
 import useWebRTC from '@/hook/useWebRTC'
@@ -33,12 +33,13 @@ const constraint = {
 export default function Page() {
 	const localVideoRef = useRef<HTMLVideoElement>(null)
 	const remoteVideoRef = useRef<HTMLVideoElement>(null)
-	const { pc, createOffer, createAnswer, addAnswer } = useWebRTC()
-	const toast = useToast()
+	const { pc, dc, createOffer, createAnswer, addAnswer } = useWebRTC()
+	const toast = useToast({ position: 'top' })
 
 	// 所有视频输入设备
 	const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([])
 	const [roomId, setRoomId] = useState('')
+	const [message, setMessage] = useState('')
 	const [isJoin, setIsJoin] = useState(false)
 	const [hasVideo, setHasVideo] = useState(true)
 	const [hasAudio, setHasAudio] = useState(true)
@@ -91,9 +92,23 @@ export default function Page() {
 		})
 		// 监听添加远程流
 		pc.ontrack = event => {
+			console.log(event)
 			event.streams[0].getTracks().forEach(track => {
 				remoteStream.addTrack(track)
 			})
+		}
+
+		// datachannel
+		pc.ondatachannel = ev => {
+			ev.channel.onopen = () => {}
+			// 当文件通道关闭时触发
+			ev.channel.onclose = () => {}
+			// 当文件通道发生错误时触发
+			ev.channel.onerror = () => {}
+			// 当文件通道收到消息时触发
+			ev.channel.onmessage = e => {
+				toast({ status: 'info', description: `对端发送消息: ${e.data}` })
+			}
 		}
 	}
 
@@ -151,6 +166,14 @@ export default function Page() {
 			sender = pc.addTrack(track, localStream)
 		})
 	}
+	const sendMessage = (e: KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === 'Enter') {
+			// @ts-ignore
+			dc.send(e.target.value)
+			// @ts-ignore
+			e.target.value = ''
+		}
+	}
 
 	useEffect(() => {
 		initWebRTC()
@@ -166,7 +189,7 @@ export default function Page() {
 			</Alert>
 			{/* 控制 */}
 			<div className="flex my-4 justify-between flex-wrap">
-				<div className="flex gap-4 flex-wrap">
+				<div className="flex gap-4 flex-wrap mb-4">
 					<Button colorScheme="teal" onClick={toggleAudio}>
 						Toggle Audio
 					</Button>
@@ -180,6 +203,7 @@ export default function Page() {
 							</option>
 						))}
 					</Select>
+					<Input placeholder="send message" onKeyDown={sendMessage} width={200} />
 				</div>
 				<div className="flex gap-4">
 					<Input placeholder="room id" onChange={e => setRoomId(e.target.value)} disabled={isJoin} />
