@@ -27,3 +27,11 @@ const fastify = Fastify({
 ```
 
 这样就配置完成了，后面服务器就会使用 https 服务了
+
+## Fastify 配置 ip 访问
+
+添加 ip `0.0.0.0`
+
+```javascript
+fastify.listen({ host: '0.0.0.0', port: 8080 })
+```
