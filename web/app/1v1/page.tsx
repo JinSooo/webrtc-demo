@@ -1,7 +1,7 @@
 'use client'
 
-import { Alert, AlertIcon, Button, Input } from '@chakra-ui/react'
-import { useEffect, useRef, useState } from 'react'
+import { Alert, AlertIcon, Button, Input, Select } from '@chakra-ui/react'
+import { ChangeEvent, useEffect, useRef, useState } from 'react'
 import io, { Socket } from 'socket.io-client'
 import { useToast } from '@chakra-ui/react'
 import useWebRTC from '@/hook/useWebRTC'
@@ -13,6 +13,22 @@ let localStream: MediaStream
 let remoteStream: MediaStream
 // 加入的房间号
 let realRoomId = ''
+// 保存本地流的track记录，用于切换摄像头时删除原本的本地流
+let sender: RTCRtpSender
+// 摄像头option
+const constraint = {
+	video: {
+		frameRate: { min: 20 }, // 帧率最小 20 帧每秒
+		width: { min: 640, ideal: 1280 },
+		height: { min: 360, ideal: 720 },
+		aspectRatio: 16 / 9, // 宽高比
+	},
+	audio: {
+		echoCancellation: true, // 开启回音消除
+		noiseSuppression: true, // 降噪
+		autoGainControl: true, // 自动增益
+	},
+}
 
 export default function Page() {
 	const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -20,10 +36,12 @@ export default function Page() {
 	const { pc, createOffer, createAnswer, addAnswer } = useWebRTC()
 	const toast = useToast()
 
+	// 所有视频输入设备
+	const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([])
 	const [roomId, setRoomId] = useState('')
 	const [isJoin, setIsJoin] = useState(false)
 	const [hasVideo, setHasVideo] = useState(true)
-	const [hasAudio, setHasAudio] = useState(false)
+	const [hasAudio, setHasAudio] = useState(true)
 
 	// 初始化websocket
 	const initSocket = () => {
@@ -47,7 +65,7 @@ export default function Page() {
 			toast({ status: 'info', description: `${data.userId} 离开房间` })
 		})
 		socket.on('sdp', data => {
-			if (data.userId === userId) return
+			// if (data.userId === userId) return
 			switch (data.type) {
 				case 'offer':
 					createOffer(socket, userId, realRoomId)
@@ -63,16 +81,13 @@ export default function Page() {
 	}
 	// 初始化WebRTC
 	const initWebRTC = async () => {
-		localStream = await navigator.mediaDevices.getUserMedia({
-			video: true,
-			// audio: true,
-		})
+		localStream = await navigator.mediaDevices.getUserMedia(constraint)
 		remoteStream = new MediaStream()
 		localVideoRef.current!.srcObject = localStream
 		remoteVideoRef.current!.srcObject = remoteStream
 		// 添加本地流
 		localStream.getTracks().forEach(track => {
-			pc.addTrack(track, localStream)
+			sender = pc.addTrack(track, localStream)
 		})
 		// 监听添加远程流
 		pc.ontrack = event => {
@@ -114,10 +129,33 @@ export default function Page() {
 		setIsJoin(false)
 		realRoomId = ''
 	}
+	// 获取视频输入设备
+	const getDevices = async () => {
+		const allDevices = await navigator.mediaDevices.enumerateDevices()
+		const videoDevices = allDevices.filter(device => device.kind === 'videoinput')
+		setVideoDevices(videoDevices)
+	}
+	// 切换设备
+	const handleDevice = async (e: ChangeEvent<HTMLSelectElement>) => {
+		// 删除之前的本地流
+		pc.removeTrack(sender)
+		localStream = await navigator.mediaDevices.getUserMedia({
+			...constraint,
+			video: {
+				deviceId: e.target.value,
+			},
+		})
+		localVideoRef.current!.srcObject = localStream
+		// 重写添加本地流
+		localStream.getTracks().forEach(track => {
+			sender = pc.addTrack(track, localStream)
+		})
+	}
 
 	useEffect(() => {
 		initWebRTC()
 		initSocket()
+		getDevices()
 	}, [])
 
 	return (
@@ -128,13 +166,20 @@ export default function Page() {
 			</Alert>
 			{/* 控制 */}
 			<div className="flex my-4 justify-between flex-wrap">
-				<div className="flex gap-4">
+				<div className="flex gap-4 flex-wrap">
 					<Button colorScheme="teal" onClick={toggleAudio}>
 						Toggle Audio
 					</Button>
 					<Button colorScheme="teal" onClick={toggleVideo}>
 						Toggle Video
 					</Button>
+					<Select width={300} onChange={handleDevice}>
+						{videoDevices.map(device => (
+							<option key={device.deviceId} value={device.deviceId}>
+								{device.label}
+							</option>
+						))}
+					</Select>
 				</div>
 				<div className="flex gap-4">
 					<Input placeholder="room id" onChange={e => setRoomId(e.target.value)} disabled={isJoin} />
@@ -150,7 +195,7 @@ export default function Page() {
 			<div className="flex gap-4 mt-10 flex-wrap">
 				<div>
 					<p>本地流:</p>
-					<video ref={localVideoRef} width={640} height={360} autoPlay playsInline></video>
+					<video ref={localVideoRef} width={640} height={360} autoPlay playsInline muted></video>
 				</div>
 				<div>
 					<p>远程流:</p>
