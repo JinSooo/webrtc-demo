@@ -1,8 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Socket } from 'socket.io-client'
 
 const useWebRTC = () => {
-	const { current: pc } = useRef(new RTCPeerConnection())
+	const { current: pc } = useRef(
+		new RTCPeerConnection({
+			iceServers: [
+				{
+					urls: 'stun:stun.l.google.com:19302',
+				},
+			],
+		}),
+	)
 	const { current: dc } = useRef(pc.createDataChannel('chat'))
 
 	const createOffer = async (socket: Socket, userId: string, roomId: string) => {

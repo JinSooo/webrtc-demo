@@ -114,11 +114,12 @@ export default function Page() {
 			}
 		}
 	}
-
+	// 打开摄像头
 	const openCamera = async () => {
 		localStream = await navigator.mediaDevices.getUserMedia(constraint)
 		initWebRTC()
 	}
+	// 打开共享屏幕
 	const openShareScreen = async () => {
 		localStream = await navigator.mediaDevices.getDisplayMedia()
 		initWebRTC()
@@ -141,6 +142,7 @@ export default function Page() {
 			track.enabled = status
 		})
 	}
+	// 截图
 	const capture = () => {
 		// 将视频图片映射到canvas中，转为base64
 		const canvas = document.createElement('canvas')
@@ -158,6 +160,7 @@ export default function Page() {
 		URL.revokeObjectURL(url)
 		a.remove()
 	}
+	// 开始录制
 	const startRecord = () => {
 		mediaRecorder = new MediaRecorder(localStream, {
 			audioBitsPerSecond: 128000,
@@ -184,6 +187,7 @@ export default function Page() {
 			a.remove()
 		}
 	}
+	// 停止录制
 	const stopRecord = () => {
 		mediaRecorder.stop()
 		buffer = []
