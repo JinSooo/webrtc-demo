@@ -6,7 +6,8 @@
 	"type": "module",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"start:1v1": "node 1v1/index.js"
+		"start:1v1": "node 1v1/index.js",
+		"start:mediasoup": "node mediasoup/index.js"
 	},
 	"keywords": [],
 	"author": "",
@@ -14,6 +15,7 @@
 	"dependencies": {
 		"fastify": "^4.19.1",
 		"fastify-socket.io": "^4.0.0",
+		"mediasoup": "^3.12.4",
 		"socket.io": "^4.7.1"
 	}
 }

@@ -142,3 +142,105 @@ Mediasoup 底层使用 C++ 开发，使用 libuv 作为其异步 IO 事件处理
 另外，对于开发能力比较强的公司来说，根据自己的业务需要在 Mediasoup 上做二次开发也是非常值得推荐的技术方案。
 
 ## Mediasoup 的使用
+
+使用的结构：
+
+![use](static/mediasoup_use.png)
+
+### server 端
+
+先创建 Worker 和 Router，同时还要将 router 支持的 RTP 类型传输给 client
+
+```javascript
+const mediasoupWorker = await mediasoup.createWorker({
+	logLevel: config.mediasoup.worker.logLevel,
+	logTags: config.mediasoup.worker.logTags,
+	rtcMinPort: config.mediasoup.worker.rtcMinPort,
+	rtcMaxPort: config.mediasoup.worker.rtcMaxPort,
+})
+const mediasoupRouter = await mediasoupWorker.createRouter({ mediaCodecs: config.mediasoup.router.mediaCodecs })
+
+// 支持的RTP类型
+mediasoupRouter.rtpCapabilities
+```
+
+后面都是两端相互联动创建连接，创建 WebRtcTransport
+
+```javascript
+const transport = await mediasoupRouter.createWebRtcTransport(option)
+return {
+	transport,
+	params: {
+		id: transport.id,
+		iceParameters: transport.iceParameters,
+		iceCandidates: transport.iceCandidates,
+		dtlsParameters: transport.dtlsParameters,
+	},
+}
+```
+
+注意返回值，transport 是一个 WebRtcTransport 实例，用于与客户端的 transport 建立连接，以便后续流媒体的传输
+
+transport 的实例需要保存，而 params 参数是传输给客户端，这样客户端就知道服务器创建了的 transport，就可以将两个 transport 建立连接了
+
+接下来是 producer ，用于将客户端的音视频传输通过 transport 传输给 mediasoup 服务器
+
+> 注意一个 producer 只对应与一种流媒体类型，即要么音频，要么视频
+
+当 client 调用 produce()方法后，服务端创建 producer 来接受它的数据并传入给 router，用于后面 consumer 分配
+
+服务端创建 producer
+
+```javascript
+// kind: audio / video
+const producer = await producerTransport.produce({ kind, rtpParameters })
+```
+
+最后是 consumer， 用于将客户端传输给 mediasoup 服务器 的数据发送给客户端
+
+当 client 调用 consume()方法后，指定要接受数据的 producer 的 id，服务端创建 consumer 来接受它的数据并传入给 client
+
+```javascript
+const consumer = await consumerTransport.consume({
+	producerId: producer.id,
+	rtpCapabilities,
+	paused: producer.kind === 'video',
+})
+```
+
+### client 端
+
+首先加载 device 数据，查看服务器支持的类型
+
+```javascript
+const device = new mediasoup.Device()
+// 使用mediasoup路由器的RTP功能加载设备
+await device.load({ routerRtpCapabilities })
+```
+
+接着创建 Send Transport，用于将自己的音视频传输给服务器
+
+创建的同时，服务器也创建对应 transport，并与之建立连接
+
+```javascript
+// 创建一个新的webbrtc传输来发送媒体。传输必须事先通过router.createwebrtctransport()在mediasoup路由器中创建
+const transport = device.createSendTransport(data)
+```
+
+接下来，我们就可以通过 produce()方法将本地音视频传输给服务器的 producer 了
+
+```javascript
+const stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+const track = stream.getVideoTracks()[0]
+await transport.produce({ track })
+```
+
+最后建立上连接之后，就可以把 stream 传给 video 了
+
+consume() 是一样的，先创建 Recv Transport，并建立 transport 的连接
+
+```javascript
+const transport = device.createRecvTransport(data)
+```
+
+接着通过 consume()，接收到对应的 producer 的流媒体，再获取到音视频 track 就可以传输到 video 中了
