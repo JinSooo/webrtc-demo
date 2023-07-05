@@ -244,3 +244,21 @@ const transport = device.createRecvTransport(data)
 ```
 
 接着通过 consume()，接收到对应的 producer 的流媒体，再获取到音视频 track 就可以传输到 video 中了
+
+### BUG: 手机端无法正常连接到 mediasoup
+
+修改 `config.js`
+
+```javascript
+{
+  // ...
+  webRtcTransport: {
+			listenIps: [
+				{
+					// '192.168.1.12'是内网IP，不能填0.0.0.0，在本机测试部署的时候也不能填127.0.0.1
+					ip: '192.168.1.12',
+				},
+			],
+		},
+}
+```
